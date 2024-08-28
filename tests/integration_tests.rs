@@ -96,8 +96,7 @@ async fn test_encrypted_channel() {
     let channels = client.get_subscribed_channels().await;
     assert!(channels.contains(&"private-encrypted-channel".to_string()));
 
-    // Test sending and receiving encrypted messages
-    // This would require mocking the server response with an encrypted payload
+    // TODO - Test sending and receiving encrypted messages
 }
 
 #[tokio::test]
