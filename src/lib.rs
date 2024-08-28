@@ -1,7 +1,5 @@
 /// A client for interacting with the Pusher service.
 ///
-/// This struct provides methods for connecting to Pusher, subscribing to channels,
-/// triggering events, and handling incoming events.
 mod auth;
 mod channels;
 mod config;
@@ -32,6 +30,8 @@ pub use events::{Event, SystemEvent};
 
 use websocket::WebSocketClient;
 
+/// This struct provides methods for connecting to Pusher, subscribing to channels,
+/// triggering events, and handling incoming events.
 pub struct PusherClient {
     config: PusherConfig,
     auth: PusherAuth,
