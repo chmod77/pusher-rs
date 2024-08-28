@@ -1,4 +1,4 @@
-# Welcome to `pusher_rs`
+# Welcome to `pusher_rs` - The long-missing Rust Pusher crate.
 
 This library is still under heavy development. Currently in use by one of the projects I am working on. Open-sourcing it since it has matured to a good level. 
 
