@@ -6,13 +6,13 @@ A Rust client library for interacting with the Pusher Channels API. This library
 
 ## Features
 
-- Connect to Pusher Channels
-- Subscribe to public, private, presence, and private encrypted channels
-- Publish events to channels
-- Handle incoming events
-- Automatic reconnection with exponential backoff
-- Environment-based configuration
-- Flexible channel management
+- [x] Connect to Pusher Channels
+- [x] Subscribe to public, private, presence, and private encrypted channels
+- [x] Publish events to channels
+- [x] Handle incoming events
+- [x] Automatic reconnection with exponential backoff
+- [x] Environment-based configuration
+- [x] Flexible channel management
 
 ### Todo
 - [ ] Support for Batch Triggers
@@ -179,17 +179,12 @@ More tests are being added. This section will be updated accordingly.
 
 Contributions are welcome! Please feel free to submit a Pull Request. Here's how you can contribute:
 
--[] Fork the repository
--[] Create your feature branch (`git checkout -b feature/AmazingFeature`)
--[] Commit your changes (`git commit -m 'Add some AmazingFeature'`)
--[] Push to the branch (`git push origin feature/AmazingFeature`)
--[] Open a Pull Request
+- [x] Fork the repository
+- [x] Create your feature branch (`git checkout -b feat/amazing-feature`)
+- [x] Commit your changes (`git commit -m 'feat: Add some amazing feature'`)
+- [x] Push to the branch (`git push origin feat/amazing-feature`)
+- [x] Open a Pull Request
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Pusher for their excellent real-time service and documentation.
-- The Rust community for providing great tools and libraries.
+This project is licensed under the MIT License.
