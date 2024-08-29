@@ -29,7 +29,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-pusher-rs = { git = "https://github.com/chmod77/pusher-rs.git" }
+pusher-rs = "0.1.0"
 ```
 
 If you want to use a specific branch or commit, you can specify it like this:
