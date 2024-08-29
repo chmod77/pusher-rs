@@ -5,8 +5,30 @@ edition = "2021"
 authors = ["chmod77 <shalom.nyende@gmail.com>"]
 description = "A bullet-proof Rust crate for interacting with the Pusher Channels HTTP/WS API"
 license = "MIT"
-repository = ""
-
+repository = "https://github.com/chmod77/pusher-rs"
+homepage = "https://github.com/chmod77/pusher-rs"
+readme = "README.md"
+keywords = [
+    "pusher",
+    "pusher-rs",
+    "pusher-rs-api",
+    "pusher-rs-client",
+    "pusher-rs-sdk",
+    "pusher-rs-library",
+    "pusher-rs-rust",
+    "pusher-rs-crate",
+    "pusher-rs-wrapper",
+    "pusher-rs-adapter",
+    "pusher-rs-connector",
+    "pusher-rs-connector",
+    "pusher-rs-adapter",
+    "pusher-rs-wrapper",
+    "pusher-rs-library",
+    "pusher-rs-sdk",
+    "pusher-rs-client",
+    "pusher-rs-api",
+    "pusher",
+]
 
 
 [dependencies]
