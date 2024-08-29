@@ -314,29 +314,6 @@ impl PusherClient {
     /// # Returns
     ///
     /// A `PusherResult` indicating success or failure.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use pusher_rs::{PusherClient, PusherConfig, PusherResult, Event};
-    /// use tokio;
-    ///
-    /// #[tokio::main]
-    /// async fn main() -> PusherResult<()> {
-    ///     let config = PusherConfig::from_env()?;
-    ///     let client = PusherClient::new(config)?;
-    ///     client.connect().await?;
-    ///     
-    ///     client.bind("test-event", |event: Event| {
-    ///         println!("Received event: {:?}", event);
-    ///     }).await?;
-    ///     
-    ///     // Keep the connection alive for a while
-    ///     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-    ///     
-    ///     Ok(())
-    /// }
-    /// ```
     pub async fn bind<F>(&self, event_name: &str, callback: F) -> PusherResult<()>
     where
         F: Fn(Event) + Send + Sync + 'static,
@@ -418,26 +395,6 @@ impl PusherClient {
     /// # Errors
     ///
     /// Returns a `PusherError` if the data cannot be decrypted.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use pusher::PusherClient;
-    /// # use pusher::PusherConfig;
-    /// # use pusher::PusherResult;
-    /// # use pusher::ConnectionState;
-    /// # use std::sync::Arc;
-    /// # use tokio::sync::RwLock;
-    /// # use std::env;
-    /// # async fn decrypt_data() -> PusherResult<()> {
-    /// let config = PusherConfig::from_env()?;
-    /// let client = PusherClient::new(config)?;
-    /// let shared_secret = client.generate
-    /// let encrypted_data = "encrypted_data";
-    /// let decrypted_data = client.decrypt_data(encrypted_data, shared_secret)?;
-    /// # Ok(())
-    /// # }
-    /// ```
     ///
     fn decrypt_data(&self, encrypted_data: &str, shared_secret: &[u8]) -> PusherResult<String> {
         let decoded = base64::decode(encrypted_data)
