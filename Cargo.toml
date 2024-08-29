@@ -13,21 +13,7 @@ keywords = [
     "pusher-rs",
     "pusher-rs-api",
     "pusher-rs-client",
-    "pusher-rs-sdk",
-    "pusher-rs-library",
-    "pusher-rs-rust",
-    "pusher-rs-crate",
-    "pusher-rs-wrapper",
-    "pusher-rs-adapter",
-    "pusher-rs-connector",
-    "pusher-rs-connector",
-    "pusher-rs-adapter",
-    "pusher-rs-wrapper",
-    "pusher-rs-library",
-    "pusher-rs-sdk",
-    "pusher-rs-client",
-    "pusher-rs-api",
-    "pusher",
+    "pusher-rs-sdk"
 ]
 
 
