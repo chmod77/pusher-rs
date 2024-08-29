@@ -2,7 +2,6 @@ use crate::error::{PusherError, PusherResult};
 use base64::{engine::general_purpose, Engine as _};
 use hmac::{Hmac, Mac};
 use log::debug;
-use md5::compute;
 use serde_json::{json, Value};
 use sha2::Sha256;
 use std::collections::BTreeMap;

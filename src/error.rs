@@ -1,7 +1,6 @@
 use thiserror::Error;
 use std::io;
 use url::ParseError;
-use tokio_tungstenite::tungstenite;
 use reqwest;
 use serde_json;
 

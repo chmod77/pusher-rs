@@ -13,7 +13,7 @@ use aes::{
 };
 use cbc::{Decryptor, Encryptor};
 use hmac::{Hmac, Mac};
-use log::{debug, error, info};
+use log::{info};
 use rand::Rng;
 use serde_json::json;
 use sha2::Sha256;
