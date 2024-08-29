@@ -194,7 +194,6 @@ impl WebSocketClient {
             }
             "pusher:error" => {
                 error!("Received error event: {:?}", event.data);
-                // Handle specific error cases here
             }
             _ => debug!("Received unhandled system event: {}", event.event),
         }
@@ -212,7 +211,7 @@ impl WebSocketClient {
 
     fn handle_pong(&mut self) {
         debug!("Received pong");
-        // Reset pong timeout here if implemented
+        // TODO - Reset pong timeout
     }
 
     async fn handle_close(&mut self, frame: Option<tokio_tungstenite::tungstenite::protocol::CloseFrame<'_>>) -> PusherResult<()> {
