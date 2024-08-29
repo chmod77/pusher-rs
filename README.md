@@ -29,15 +29,15 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-pusher-rs = { git = "https://github.com/chmod77/pusher-rust.git" }
+pusher-rs = { git = "https://github.com/chmod77/pusher-rs.git" }
 ```
 
 If you want to use a specific branch or commit, you can specify it like this:
 ```toml
 [dependencies]
-pusher-rust = { git = "https://github.com/username/pusher-rust.git", branch = "main" }
+pusher-rs = { git = "https://github.com/username/pusher-rs.git", branch = "main" }
 # or
-pusher-rust = { git = "https://github.com/username/pusher-rust.git", rev = "commit_hash" }
+pusher-rs = { git = "https://github.com/username/pusher-rs.git", rev = "commit_hash" }
 ```
 
 ## Configuration
