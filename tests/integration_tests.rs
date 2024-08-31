@@ -42,21 +42,54 @@ async fn test_pusher_client_connection() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_channel_subscription() {
     let mut client = setup_client().await;
 
-    // client.connect().await.unwrap();
-    client.subscribe("test-channel").await.unwrap();
+    // Connect with a timeout
+    match timeout(Duration::from_secs(10), client.connect()).await {
+        Ok(result) => {
+            result.expect("Failed to connect to Pusher");
+        }
+        Err(_) => panic!("Connection timed out"),
+    }
+
+    // Ensure we're connected
+    assert_eq!(
+        client.get_connection_state().await,
+        ConnectionState::Connected
+    );
+
+    // Subscribe to the channel
+    match timeout(Duration::from_secs(5), client.subscribe("test-channel")).await {
+        Ok(result) => {
+            result.expect("Failed to subscribe to channel");
+        }
+        Err(_) => panic!("Subscription timed out"),
+    }
+
+    // Wait a bit for the subscription to be processed
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     let channels = client.get_subscribed_channels().await;
     log::info!("Subscribed channels: {:?}", channels);
-    assert!(channels.contains(&"test-channel".to_string()));
+    assert!(channels.contains(&"test-channel".to_string()), "Channel not found in subscribed channels");
 
-    client.unsubscribe("test-channel").await.unwrap();
+    // Unsubscribe from the channel
+    match timeout(Duration::from_secs(5), client.unsubscribe("test-channel")).await {
+        Ok(result) => {
+            result.expect("Failed to unsubscribe from channel");
+        }
+        Err(_) => panic!("Unsubscription timed out"),
+    }
+
+    // Wait a bit for the unsubscription to be processed
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     let channels = client.get_subscribed_channels().await;
-    assert!(!channels.contains(&"test-channel".to_string()));
+    assert!(!channels.contains(&"test-channel".to_string()), "Channel still present after unsubscription");
+
+    // Disconnect the client
+    client.disconnect().await.expect("Failed to disconnect");
 }
 
 #[tokio::test]
@@ -85,21 +118,23 @@ async fn test_event_binding() {
     assert!(*event_received.read().await);
 }
 
-// #[tokio::test]
-// async fn test_encrypted_channel() {
-//     let mut client = setup_client().await;
+#[tokio::test]
+#[ignore]
+async fn test_encrypted_channel() {
+    let mut client = setup_client().await;
 
-//     client.connect().await.unwrap();
-//     client
-//         .subscribe_encrypted("private-encrypted-channel")
-//         .await
-//         .unwrap();
+    client.connect().await.unwrap();
+    client
+        .subscribe_encrypted("private-encrypted-channel")
+        .await
+        .unwrap();
 
-//     let channels = client.get_subscribed_channels().await;
-//     assert!(channels.contains(&"private-encrypted-channel".to_string()));
+    let channels = client.get_subscribed_channels().await;
+    assert!(channels.contains(&"private-encrypted-channel".to_string()));
 
-//     // TODO - Test sending and receiving encrypted messages
-// }
+    // TODO - Test sending and receiving encrypted messages
+}
+
 
 #[tokio::test]
 async fn test_send_payload() {
@@ -124,15 +159,15 @@ async fn test_send_payload() {
     let test_data = r#"{"message": "Hello, Pusher!"}"#;
 
     // Subscribe to the channel
-    // client
-    //     .subscribe(test_channel)
-    //     .await
-    //     .expect("Failed to subscribe to channel");
+    client
+        .subscribe(test_channel)
+        .await
+        .expect("Failed to subscribe to channel");
 
     // Set up event binding to capture the triggered event
     let event_received = Arc::new(RwLock::new(false));
     let event_received_clone = event_received.clone();
-    let received_data = Arc::new(RwLock::new(String::new()));
+    let received_data = Arc::new(RwLock::new(None));
     let received_data_clone = received_data.clone();
 
     client
@@ -143,7 +178,7 @@ async fn test_send_payload() {
                 let mut flag = event_received.write().await;
                 *flag = true;
                 let mut data = received_data.write().await;
-                *data = serde_json::to_string(&event.data).unwrap();
+                *data = Some(event.data);
             });
         })
         .await
@@ -158,19 +193,21 @@ async fn test_send_payload() {
     // Wait for the event to be processed
     tokio::time::sleep(Duration::from_secs(2)).await;
 
-    // Assert that the event was received and processed
-    // assert!(*event_received.read().await, "Event was not received");
+    // let's ssert that the event was received and processed
+    assert!(*event_received.read().await, "Event was not received");
 
-    // Assert that the received data matches the sent data
-    // let received = received_data.read().await;
-    // assert_eq!(
-    //     *received, test_data,
-    //     "Received data does not match sent data"
-    // );
+    // let's assert that the received data matches the sent data
+    let received = received_data.read().await;
+    let expected_data: serde_json::Value = serde_json::from_str(test_data).unwrap();
+    assert_eq!(
+        received.as_ref().unwrap(),
+        &expected_data,
+        "Received data does not match sent data"
+    );
 
-    // client
-    //     .unsubscribe(test_channel)
-    //     .await
-    //     .expect("Failed to unsubscribe from channel");
-    // client.disconnect().await.expect("Failed to disconnect");
+    client
+        .unsubscribe(test_channel)
+        .await
+        .expect("Failed to unsubscribe from channel");
+    client.disconnect().await.expect("Failed to disconnect");
 }

@@ -5,6 +5,7 @@ use serde_json::Value;
 pub struct Event {
     pub event: String,
     pub channel: Option<String>,
+    #[serde(with = "json_string")]
     pub data: Value,
 }
 
@@ -113,6 +114,25 @@ impl SystemEvent {
     }
 }
 
+mod json_string {
+    use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
+    use serde_json::Value;
+
+    pub fn serialize<S>(value: &Value, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        value.to_string().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        serde_json::from_str(&s).map_err(D::Error::custom)
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

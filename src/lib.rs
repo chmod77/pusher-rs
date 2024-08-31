@@ -15,7 +15,7 @@ use cbc::{Decryptor, Encryptor};
 use hmac::{Hmac, Mac};
 use log::info;
 use rand::Rng;
-use serde_json::json;
+use serde_json::{json, Value};
 use sha2::Sha256;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -28,14 +28,15 @@ pub use config::PusherConfig;
 pub use error::{PusherError, PusherResult};
 pub use events::{Event, SystemEvent};
 
-use websocket::WebSocketClient;
+use websocket::{WebSocketClient, WebSocketCommand};
 
 /// This struct provides methods for connecting to Pusher, subscribing to channels,
 /// triggering events, and handling incoming events.
 pub struct PusherClient {
     config: PusherConfig,
     auth: PusherAuth,
-    websocket: Option<WebSocketClient>,
+    // websocket: Option<WebSocketClient>,
+    websocket_command_tx: Option<mpsc::Sender<WebSocketCommand>>,
     channels: Arc<RwLock<HashMap<String, Channel>>>,
     event_handlers: Arc<RwLock<HashMap<String, Vec<Box<dyn Fn(Event) + Send + Sync + 'static>>>>>,
     state: Arc<RwLock<ConnectionState>>,
@@ -73,29 +74,44 @@ impl PusherClient {
         let auth = PusherAuth::new(&config.app_key, &config.app_secret);
         let (event_tx, event_rx) = mpsc::channel(100);
         let state = Arc::new(RwLock::new(ConnectionState::Disconnected));
-        let event_handlers = Arc::new(RwLock::new(HashMap::new()));
-        let encrypted_channels = Arc::new(RwLock::new(HashMap::new()));
+        let event_handlers = Arc::new(RwLock::new(std::collections::HashMap::new()));
+        let encrypted_channels = Arc::new(RwLock::new(std::collections::HashMap::new()));
 
         let client = Self {
             config,
             auth,
-            websocket: None,
-            channels: Arc::new(RwLock::new(HashMap::new())),
+            websocket_command_tx: None,
+            channels: Arc::new(RwLock::new(std::collections::HashMap::new())),
             event_handlers: event_handlers.clone(),
             state: state.clone(),
             event_tx,
             encrypted_channels,
         };
 
-        // Spawn the event handling task
         tokio::spawn(Self::handle_events(event_rx, event_handlers));
 
         Ok(client)
     }
+
+    async fn send(&self, message: String) -> PusherResult<()> {
+        if let Some(tx) = &self.websocket_command_tx {
+            tx.send(WebSocketCommand::Send(message))
+                .await
+                .map_err(|e| {
+                    PusherError::WebSocketError(format!("Failed to send command: {}", e))
+                })?;
+            Ok(())
+        } else {
+            Err(PusherError::ConnectionError("Not connected".into()))
+        }
+    }
+
     async fn handle_events(
         mut event_rx: mpsc::Receiver<Event>,
         event_handlers: Arc<
-            RwLock<HashMap<String, Vec<Box<dyn Fn(Event) + Send + Sync + 'static>>>>,
+            RwLock<
+                std::collections::HashMap<String, Vec<Box<dyn Fn(Event) + Send + Sync + 'static>>>,
+            >,
         >,
     ) {
         while let Some(event) = event_rx.recv().await {
@@ -115,17 +131,23 @@ impl PusherClient {
     /// A `PusherResult` indicating success or failure.
     pub async fn connect(&mut self) -> PusherResult<()> {
         let url = self.get_websocket_url()?;
-        let mut websocket =
-            WebSocketClient::new(url.clone(), Arc::clone(&self.state), self.event_tx.clone());
+        let (command_tx, command_rx) = mpsc::channel(100);
+
+        let mut websocket = WebSocketClient::new(
+            url.clone(),
+            Arc::clone(&self.state),
+            self.event_tx.clone(),
+            command_rx,
+        );
+
         log::info!("Connecting to Pusher using URL: {}", url);
         websocket.connect().await?;
-        self.websocket = Some(websocket);
 
-        // Start the WebSocket event loop
-        let mut ws = self.websocket.take().unwrap();
         tokio::spawn(async move {
-            ws.run().await;
+            websocket.run().await;
         });
+
+        self.websocket_command_tx = Some(command_tx);
 
         Ok(())
     }
@@ -136,11 +158,12 @@ impl PusherClient {
     ///
     /// A `PusherResult` indicating success or failure.
     pub async fn disconnect(&mut self) -> PusherResult<()> {
-        if let Some(websocket) = &self.websocket {
-            websocket.close().await?;
+        if let Some(tx) = self.websocket_command_tx.take() {
+            tx.send(WebSocketCommand::Close).await.map_err(|e| {
+                PusherError::WebSocketError(format!("Failed to send close command: {}", e))
+            })?;
         }
         *self.state.write().await = ConnectionState::Disconnected;
-        self.websocket = None;
         Ok(())
     }
 
@@ -158,20 +181,16 @@ impl PusherClient {
         let mut channels = self.channels.write().await;
         channels.insert(channel_name.to_string(), channel);
 
-        if let Some(websocket) = &self.websocket {
-            let data = json!({
-                "event": "pusher:subscribe",
-                "data": {
-                    "channel": channel_name
-                }
-            });
-            websocket.send(serde_json::to_string(&data)?).await?;
-        } else {
-            return Err(PusherError::ConnectionError("Not connected".into()));
-        }
+        let data = json!({
+            "event": "pusher:subscribe",
+            "data": {
+                "channel": channel_name
+            }
+        });
 
-        Ok(())
+        self.send(serde_json::to_string(&data)?).await
     }
+
 
     /// Subscribes to an encrypted channel.
     ///
@@ -208,6 +227,7 @@ impl PusherClient {
     /// # Returns
     ///
     /// A `PusherResult` indicating success or failure.
+    ///
     pub async fn unsubscribe(&mut self, channel_name: &str) -> PusherResult<()> {
         {
             let mut channels = self.channels.write().await;
@@ -219,19 +239,14 @@ impl PusherClient {
             encrypted_channels.remove(channel_name);
         }
 
-        if let Some(websocket) = &self.websocket {
-            let data = json!({
-                "event": "pusher:unsubscribe",
-                "data": {
-                    "channel": channel_name
-                }
-            });
-            websocket.send(serde_json::to_string(&data)?).await?;
-        } else {
-            return Err(PusherError::ConnectionError("Not connected".into()));
-        }
+        let data = json!({
+            "event": "pusher:unsubscribe",
+            "data": {
+                "channel": channel_name
+            }
+        });
 
-        Ok(())
+        self.send(serde_json::to_string(&data)?).await
     }
 
     /// Triggers an event on a channel.
@@ -251,10 +266,14 @@ impl PusherClient {
             self.config.cluster, self.config.app_id
         );
 
+        // Validate that the data is valid JSON, but keep it as a string
+        serde_json::from_str::<serde_json::Value>(data)
+            .map_err(|e| PusherError::JsonError(e))?;
+
         let body = json!({
             "name": event,
             "channel": channel,
-            "data": data
+            "data": data, // Keep data as a string
         });
         let path = format!("/apps/{}/events", self.config.app_id);
         let auth_params = self.auth.authenticate_request("POST", &path, &body)?;
@@ -371,6 +390,7 @@ impl PusherClient {
     /// # Returns
     ///
     /// A `PusherResult` indicating success or failure.
+    ///
     pub async fn bind<F>(&self, event_name: &str, callback: F) -> PusherResult<()>
     where
         F: Fn(Event) + Send + Sync + 'static,
@@ -535,7 +555,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_trigger_batch() {
-        let config = PusherConfig::from_env().expect("Failed to load Pusher configuration from environment");
+        let config =
+            PusherConfig::from_env().expect("Failed to load Pusher configuration from environment");
         let client = PusherClient::new(config).unwrap();
 
         let batch_events = vec![

@@ -71,6 +71,53 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+
+### Connecting
+
+Connect to Pusher:
+
+```rust
+client.connect().await?;
+```
+
+### Subscribing to Channels
+
+Subscribe to a public channel:
+
+```rust
+client.subscribe("my-channel").await?;
+```
+
+Subscribe to a private channel:
+
+```rust
+client.subscribe("private-my-channel").await?;
+```
+
+Subscribe to a presence channel:
+
+```rust
+client.subscribe("presence-my-channel").await?;
+```
+
+### Unsubscribing from Channels
+
+```rust
+client.unsubscribe("my-channel").await?;
+```
+
+### Binding to Events
+
+Bind to a specific event on a channel:
+
+```rust
+use pusher_rs::Event;
+
+client.bind("my-event", |event: Event| {
+    println!("Received event: {:?}", event);
+}).await?;
+```
+
 ### Subscribing to a channel
 
 ```rust
@@ -133,6 +180,15 @@ The library supports four types of channels:
 
 Each channel type has specific features and authentication requirements.
 
+### Handling Connection State
+
+Get the current connection state:
+
+```rust
+let state = client.get_connection_state().await;
+println!("Current connection state: {:?}", state);
+```
+
 ## Error Handling
 
 The library uses a custom `PusherError` type for error handling. You can match on different error variants to handle specific error cases:
@@ -146,6 +202,14 @@ match client.connect().await {
     Err(PusherError::AuthError(e)) => println!("Authentication error: {}", e),
     Err(e) => println!("Other error: {}", e),
 }
+```
+
+### Disconnecting
+
+When you're done, disconnect from Pusher:
+
+```rust
+client.disconnect().await?;
 ```
 
 ## Advanced Usage
@@ -184,6 +248,25 @@ channel_list.add(channel);
 if let Some(channel) = channel_list.get("my-channel") {
     println!("Channel type: {:?}", channel.channel_type());
 }
+```
+
+### Presence Channels
+
+When subscribing to a presence channel, you can provide user information:
+
+```rust
+use serde_json::json;
+
+let channel = "presence-my-channel";
+let socket_id = client.get_socket_id().await?;
+let user_id = "user_123";
+let user_info = json!({
+    "name": "John Doe",
+    "email": "john@example.com"
+});
+
+let auth = client.authenticate_presence_channel(&socket_id, channel, user_id, Some(&user_info))?;
+client.subscribe_with_auth(channel, &auth).await?;
 ```
 
 ### Tests
