@@ -111,13 +111,14 @@ mod tests {
         assert_eq!(config.pong_timeout, Duration::from_secs(30));
     }
 
-    // #[test]
-    // fn test_new_config() {
-    //     let config =
-    //         PusherConfig::from_env().expect("Failed to load Pusher configuration from environment");
-    //     assert_eq!(config.app_id, "app_id");
-    //     assert_eq!(config.app_key, "app_key");
-    //     assert_eq!(config.app_secret, "app_secret");
-    //     assert_eq!(config.cluster, "eu");
-    // }
+    #[test]
+    #[ignore]
+    fn test_new_config() {
+        let config =
+            PusherConfig::from_env().expect("Failed to load Pusher configuration from environment");
+        assert_eq!(config.app_id, "app_id");
+        assert_eq!(config.app_key, "app_key");
+        assert_eq!(config.app_secret, "app_secret");
+        assert_eq!(config.cluster, "eu");
+    }
 }

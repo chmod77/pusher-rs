@@ -13,15 +13,14 @@ A Rust client library for interacting with the Pusher Channels API. This library
 - [x] Automatic reconnection with exponential backoff
 - [x] Environment-based configuration
 - [x] Flexible channel management
+- [x] Support for Batch Triggers
 
 ### Todo
-- [ ] Support for Batch Triggers
 - [ ] Improve error handling and logging
 - [ ] Add comprehensive test suite
 - [ ] Implement WebHooks support
 - [ ] Optimize performance for high-load scenarios
 - [ ] Create more detailed documentation and examples
-
 
 ## Installation
 
@@ -82,6 +81,27 @@ client.subscribe("my-channel").await?;
 
 ```rust
 client.trigger("my-channel", "my-event", "Hello, Pusher!").await?;
+```
+
+### Publishing batch events
+
+```rust
+use pusher_rs::BatchEvent;
+
+let batch_events = vec![
+    BatchEvent {
+        channel: "channel-1".to_string(),
+        event: "event-1".to_string(),
+        data: "{\"message\": \"Hello from event 1\"}".to_string(),
+    },
+    BatchEvent {
+        channel: "channel-2".to_string(),
+        event: "event-2".to_string(),
+        data: "{\"message\": \"Hello from event 2\"}".to_string(),
+    },
+];
+
+client.trigger_batch(batch_events).await?;
 ```
 
 ### Handling events
@@ -173,7 +193,6 @@ Integration tests live under `tests/integration_tests`
 Just run `cargo test --test integration_tests -- --nocapture` to start.
 
 More tests are being added. This section will be updated accordingly.
-
 
 ## Contributing
 

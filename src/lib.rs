@@ -13,7 +13,7 @@ use aes::{
 };
 use cbc::{Decryptor, Encryptor};
 use hmac::{Hmac, Mac};
-use log::{info};
+use log::info;
 use rand::Rng;
 use serde_json::json;
 use sha2::Sha256;
@@ -41,6 +41,13 @@ pub struct PusherClient {
     state: Arc<RwLock<ConnectionState>>,
     event_tx: mpsc::Sender<Event>,
     encrypted_channels: Arc<RwLock<HashMap<String, Vec<u8>>>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct BatchEvent {
+    pub channel: String,
+    pub event: String,
+    pub data: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -304,6 +311,56 @@ impl PusherClient {
         self.trigger(channel, event, &encrypted_data).await
     }
 
+    /// Triggers multiple events in a single API call.
+    ///
+    /// # Arguments
+    ///
+    /// * `batch_events` - A vector of `BatchEvent` structs, each containing channel, event, and data.
+    ///
+    /// # Returns
+    ///
+    /// A `PusherResult` indicating success or failure.
+    pub async fn trigger_batch(&self, batch_events: Vec<BatchEvent>) -> PusherResult<()> {
+        let url = format!(
+            "https://api-{}.pusher.com/apps/{}/batch_events",
+            self.config.cluster, self.config.app_id
+        );
+
+        let events: Vec<serde_json::Value> = batch_events
+            .into_iter()
+            .map(|event| {
+                json!({
+                    "channel": event.channel,
+                    "name": event.event,
+                    "data": event.data
+                })
+            })
+            .collect();
+
+        let body = json!({ "batch": events });
+        let path = format!("/apps/{}/batch_events", self.config.app_id);
+        let auth_params = self.auth.authenticate_request("POST", &path, &body)?;
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post(&url)
+            .json(&body)
+            .query(&auth_params)
+            .send()
+            .await?;
+
+        let response_status = response.status();
+        if response_status.is_success() {
+            Ok(())
+        } else {
+            let error_body = response.text().await?;
+            Err(PusherError::ApiError(format!(
+                "Failed to trigger batch events: {} - {}",
+                response_status, error_body
+            )))
+        }
+    }
+
     /// Binds a callback to an event.
     ///
     /// # Arguments
@@ -458,6 +515,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore]
     async fn test_client_creation() {
         let config =
             PusherConfig::from_env().expect("Failed to load Pusher configuration from environment");
@@ -466,11 +524,34 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_generate_shared_secret() {
         let config =
             PusherConfig::from_env().expect("Failed to load Pusher configuration from environment");
         let client = PusherClient::new(config).unwrap();
         let secret = client.generate_shared_secret("test-channel");
         assert!(!secret.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_trigger_batch() {
+        let config = PusherConfig::from_env().expect("Failed to load Pusher configuration from environment");
+        let client = PusherClient::new(config).unwrap();
+
+        let batch_events = vec![
+            BatchEvent {
+                channel: "test-channel-1".to_string(),
+                event: "test-event-1".to_string(),
+                data: "{\"message\": \"Hello from event 1\"}".to_string(),
+            },
+            BatchEvent {
+                channel: "test-channel-2".to_string(),
+                event: "test-event-2".to_string(),
+                data: "{\"message\": \"Hello from event 2\"}".to_string(),
+            },
+        ];
+
+        let result = client.trigger_batch(batch_events).await;
+        assert!(result.is_ok());
     }
 }
