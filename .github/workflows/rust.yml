@@ -11,12 +11,21 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Create .env file
+      run: |
+        echo "PUSHER_APP_ID=${{ secrets.PUSHER_APP_ID }}" >> .env
+        echo "PUSHER_KEY=${{ secrets.PUSHER_KEY }}" >> .env
+        echo "PUSHER_SECRET=${{ secrets.PUSHER_SECRET }}" >> .env
+        echo "PUSHER_CLUSTER=${{ secrets.PUSHER_CLUSTER }}" >> .env
+        echo "PUSHER_USE_TLS=${{ secrets.PUSHER_USE_TLS }}" >> .env
+
     - name: Build
       run: cargo build --verbose
+
     - name: Run tests
       run: cargo test --verbose
