@@ -535,7 +535,6 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[ignore]
     async fn test_client_creation() {
         let config =
             PusherConfig::from_env().expect("Failed to load Pusher configuration from environment");
