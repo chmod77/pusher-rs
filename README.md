@@ -1,6 +1,8 @@
 # Welcome to `pusher_rs` - The long-missing Rust Pusher crate.
 
-This library is still under heavy development. Currently in use by one of the projects I am working on. Open-sourcing it since it has matured to a good level. 
+    This library is still under heavy development. Currently in use by one of the projects I am working on. 
+    
+    Open-sourcing it since it has matured to a good level. 
 
 A Rust client library for interacting with the Pusher Channels API. This library provides a simple and efficient way to integrate Pusher's real-time functionality into your Rust applications.
 
