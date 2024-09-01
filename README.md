@@ -28,7 +28,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-pusher-rs = "0.1.0"
+pusher-rs = "0.1.1"
 ```
 
 If you want to use a specific branch or commit, you can specify it like this:
