@@ -26,7 +26,7 @@ pub use auth::PusherAuth;
 pub use channels::{Channel, ChannelType};
 pub use config::PusherConfig;
 pub use error::{PusherError, PusherResult};
-pub use events::{Event, SystemEvent};
+pub use events::{Event, SystemEvent, SystemEventData};
 
 use websocket::{WebSocketClient, WebSocketCommand};
 
@@ -42,6 +42,7 @@ pub struct PusherClient {
     state: Arc<RwLock<ConnectionState>>,
     event_tx: mpsc::Sender<Event>,
     encrypted_channels: Arc<RwLock<HashMap<String, Vec<u8>>>>,
+    socket_id: Arc<RwLock<Option<String>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -77,6 +78,9 @@ impl PusherClient {
         let event_handlers = Arc::new(RwLock::new(std::collections::HashMap::new()));
         let encrypted_channels = Arc::new(RwLock::new(std::collections::HashMap::new()));
 
+        let socket_id = Arc::new(RwLock::new(None));
+        let socket_id_for_handler = Arc::clone(&socket_id);
+
         let client = Self {
             config,
             auth,
@@ -86,9 +90,10 @@ impl PusherClient {
             state: state.clone(),
             event_tx,
             encrypted_channels,
+            socket_id,
         };
 
-        tokio::spawn(Self::handle_events(event_rx, event_handlers));
+        tokio::spawn(Self::handle_events(event_rx, event_handlers, socket_id_for_handler));
 
         Ok(client)
     }
@@ -113,8 +118,19 @@ impl PusherClient {
                 std::collections::HashMap<String, Vec<Box<dyn Fn(Event) + Send + Sync + 'static>>>,
             >,
         >,
+        socket_id: Arc<RwLock<Option<String>>>,
     ) {
         while let Some(event) = event_rx.recv().await {
+            // Extract socket_id from connection_established events
+            if event.event == "pusher:connection_established" {
+                if let Some(system_event) = event.as_system_event() {
+                    if let SystemEventData::ConnectionEstablished { socket_id: sid, .. } = system_event.data {
+                        let mut socket_id_guard = socket_id.write().await;
+                        *socket_id_guard = Some(sid);
+                    }
+                }
+            }
+
             let handlers = event_handlers.read().await;
             if let Some(callbacks) = handlers.get(&event.event) {
                 for callback in callbacks {
@@ -216,6 +232,66 @@ impl PusherClient {
         }
 
         self.subscribe(channel_name).await
+    }
+
+    /// Gets the current socket ID.
+    ///
+    /// # Returns
+    ///
+    /// A `PusherResult` containing the socket ID if connected, or an error if not connected.
+    pub async fn get_socket_id(&self) -> PusherResult<String> {
+        let socket_id_guard = self.socket_id.read().await;
+        socket_id_guard
+            .clone()
+            .ok_or_else(|| PusherError::ConnectionError("Not connected or socket ID not available".into()))
+    }
+
+    /// Authenticates a presence channel subscription.
+    ///
+    /// # Arguments
+    ///
+    /// * `socket_id` - The socket ID from the connection.
+    /// * `channel_name` - The name of the presence channel.
+    /// * `user_id` - The user ID for the presence channel.
+    /// * `user_info` - Optional user information as a JSON value.
+    ///
+    /// # Returns
+    ///
+    /// A `PusherResult` containing the authentication string.
+    pub fn authenticate_presence_channel(
+        &self,
+        socket_id: &str,
+        channel_name: &str,
+        user_id: &str,
+        user_info: Option<&Value>,
+    ) -> PusherResult<String> {
+        self.auth.authenticate_presence_channel(socket_id, channel_name, user_id, user_info)
+    }
+
+    /// Subscribes to a channel with authentication data.
+    ///
+    /// # Arguments
+    ///
+    /// * `channel_name` - The name of the channel to subscribe to.
+    /// * `auth` - The authentication string (from `authenticate_presence_channel` or similar).
+    ///
+    /// # Returns
+    ///
+    /// A `PusherResult` indicating success or failure.
+    pub async fn subscribe_with_auth(&mut self, channel_name: &str, auth: &str) -> PusherResult<()> {
+        let channel = Channel::new(channel_name);
+        let mut channels = self.channels.write().await;
+        channels.insert(channel_name.to_string(), channel);
+
+        let data = json!({
+            "event": "pusher:subscribe",
+            "data": {
+                "channel": channel_name,
+                "auth": auth
+            }
+        });
+
+        self.send(serde_json::to_string(&data)?).await
     }
 
     /// Unsubscribes from a channel.
@@ -511,6 +587,57 @@ impl PusherClient {
     /// A vector of channel names.
     pub async fn get_subscribed_channels(&self) -> Vec<String> {
         self.channels.read().await.keys().cloned().collect()
+    }
+
+    /// Gets the channel Occupancy
+    /// 
+    /// # Returns
+    /// 
+    /// A PusherResult  
+    pub async fn get_channel_occupancy(&self, channel_name: &str) -> PusherResult<u32> {
+        let path = format!("/apps/{}/channels/{}", self.config.app_id, channel_name);
+        let url = format!(
+            "https://api-{}.pusher.com{}",
+            self.config.cluster, path
+        );
+
+        // Create an empty body for GET request
+        let body = serde_json::json!({});
+        log::info!("BODY: {:?}", body);
+        log::info!("URL {:?}", url);
+        let mut params = self.auth.authenticate_request(
+            "GET",
+            &path,
+            &body
+        )?;
+
+        log::info!("PARAMS: {:?}", params);
+        // Add the info parameter to the query string, not the body
+        params.insert("info".to_string(), "subscription_count".to_string());
+
+        let client = reqwest::Client::new();
+        let response = client
+            .get(&url)
+            .query(&params)
+            .send()
+            .await?;
+        log::info!("URL: {:?}", response.url());
+        let status = response.status();
+
+        if status.is_success() {
+            let body: serde_json::Value = response.json().await?;
+            Ok(body.get("occupied")
+                .and_then(|v| v.as_bool())
+                .map(|occupied| if occupied { 1 } else { 0 })
+                .or_else(|| body["subscription_count"].as_u64().map(|count| count as u32))
+                .unwrap_or(0))
+        } else {
+            let error_body = response.text().await?;
+            Err(PusherError::ApiError(format!(
+                "Failed to get channel occupancy: {} - {}",
+                status, error_body
+            )))
+        }
     }
 
     /// Sends a test event through the client.

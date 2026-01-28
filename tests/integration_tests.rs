@@ -73,7 +73,8 @@ async fn test_channel_subscription() {
     let channels = client.get_subscribed_channels().await;
     log::info!("Subscribed channels: {:?}", channels);
     assert!(channels.contains(&"test-channel".to_string()), "Channel not found in subscribed channels");
-
+    let occupancy = client.get_channel_occupancy("my-channel").await;
+    println!("Channel occupancy: {:?}", occupancy);
     // Unsubscribe from the channel
     match timeout(Duration::from_secs(5), client.unsubscribe("test-channel")).await {
         Ok(result) => {
