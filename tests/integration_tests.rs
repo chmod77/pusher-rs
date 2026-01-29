@@ -26,7 +26,7 @@ async fn setup_client() -> PusherClient {
 
 #[tokio::test]
 async fn test_pusher_client_connection() {
-    let mut client = setup_client().await;
+    let client = setup_client().await;
 
     client.connect().await.unwrap();
     assert_eq!(
@@ -43,7 +43,7 @@ async fn test_pusher_client_connection() {
 
 #[tokio::test]
 async fn test_channel_subscription() {
-    let mut client = setup_client().await;
+    let client = setup_client().await;
 
     // Connect with a timeout
     match timeout(Duration::from_secs(10), client.connect()).await {
@@ -72,7 +72,10 @@ async fn test_channel_subscription() {
 
     let channels = client.get_subscribed_channels().await;
     log::info!("Subscribed channels: {:?}", channels);
-    assert!(channels.contains(&"test-channel".to_string()), "Channel not found in subscribed channels");
+    assert!(
+        channels.contains(&"test-channel".to_string()),
+        "Channel not found in subscribed channels"
+    );
     let occupancy = client.get_channel_occupancy("my-channel").await;
     println!("Channel occupancy: {:?}", occupancy);
     // Unsubscribe from the channel
@@ -87,7 +90,10 @@ async fn test_channel_subscription() {
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     let channels = client.get_subscribed_channels().await;
-    assert!(!channels.contains(&"test-channel".to_string()), "Channel still present after unsubscription");
+    assert!(
+        !channels.contains(&"test-channel".to_string()),
+        "Channel still present after unsubscription"
+    );
 
     // Disconnect the client
     client.disconnect().await.expect("Failed to disconnect");
@@ -122,7 +128,7 @@ async fn test_event_binding() {
 #[tokio::test]
 #[ignore]
 async fn test_encrypted_channel() {
-    let mut client = setup_client().await;
+    let client = setup_client().await;
 
     client.connect().await.unwrap();
     client
@@ -136,10 +142,9 @@ async fn test_encrypted_channel() {
     // TODO - Test sending and receiving encrypted messages
 }
 
-
 #[tokio::test]
 async fn test_send_payload() {
-    let mut client = setup_client().await;
+    let client = setup_client().await;
 
     // Connect with a timeout
     match timeout(Duration::from_secs(10), client.connect()).await {
@@ -211,4 +216,62 @@ async fn test_send_payload() {
         .await
         .expect("Failed to unsubscribe from channel");
     client.disconnect().await.expect("Failed to disconnect");
+}
+
+#[tokio::test]
+async fn test_builder_pattern() {
+    use pusher_rs::PusherConfig;
+    use std::time::Duration;
+
+    // Test builder pattern
+    let config = PusherConfig::builder()
+        .app_id("test_app_id")
+        .app_key("test_app_key")
+        .app_secret("test_app_secret")
+        .cluster("eu")
+        .use_tls(true)
+        .max_reconnection_attempts(10)
+        .backoff_interval(Duration::from_secs(2))
+        .build()
+        .expect("Failed to build config");
+
+    assert_eq!(config.app_id, "test_app_id");
+    assert_eq!(config.app_key, "test_app_key");
+    assert_eq!(config.cluster, "eu");
+    assert_eq!(config.max_reconnection_attempts, 10);
+    assert_eq!(config.backoff_interval, Duration::from_secs(2));
+}
+
+#[tokio::test]
+async fn test_event_stream() {
+    let client = setup_client().await;
+
+    // Subscribe to events stream
+    let mut events = client.subscribe_events();
+
+    // Send a test event
+    let test_event = Event::new("test-stream-event".to_string(), None, serde_json::json!({}));
+    client.send_test_event(test_event.clone()).await.unwrap();
+
+    // Receive the event from the stream
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Try to receive the event (non-blocking check)
+    let mut received = false;
+    for _ in 0..10 {
+        match events.try_recv() {
+            Ok(event) if event.event == "test-stream-event" => {
+                received = true;
+                break;
+            }
+            Ok(_) => continue,
+            Err(tokio::sync::broadcast::error::TryRecvError::Empty) => {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                continue;
+            }
+            Err(_) => break,
+        }
+    }
+
+    assert!(received, "Event should be received from stream");
 }

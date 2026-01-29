@@ -11,6 +11,7 @@ use aes::{
     cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit},
     Aes256,
 };
+use base64::{engine::general_purpose, Engine as _};
 use cbc::{Decryptor, Encryptor};
 use hmac::{Hmac, Mac};
 use log::info;
@@ -19,11 +20,11 @@ use serde_json::{json, Value};
 use sha2::Sha256;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{broadcast, mpsc, RwLock};
 use url::Url;
 
 pub use auth::PusherAuth;
-pub use channels::{Channel, ChannelType};
+pub use channels::{Channel, ChannelList, ChannelType};
 pub use config::PusherConfig;
 pub use error::{PusherError, PusherResult};
 pub use events::{Event, SystemEvent, SystemEventData};
@@ -36,11 +37,12 @@ pub struct PusherClient {
     config: PusherConfig,
     auth: PusherAuth,
     // websocket: Option<WebSocketClient>,
-    websocket_command_tx: Option<mpsc::Sender<WebSocketCommand>>,
+    websocket_command_tx: Arc<RwLock<Option<mpsc::Sender<WebSocketCommand>>>>,
     channels: Arc<RwLock<HashMap<String, Channel>>>,
     event_handlers: Arc<RwLock<HashMap<String, Vec<Box<dyn Fn(Event) + Send + Sync + 'static>>>>>,
     state: Arc<RwLock<ConnectionState>>,
     event_tx: mpsc::Sender<Event>,
+    event_broadcast: broadcast::Sender<Event>,
     encrypted_channels: Arc<RwLock<HashMap<String, Vec<u8>>>>,
     socket_id: Arc<RwLock<Option<String>>>,
 }
@@ -74,21 +76,24 @@ impl PusherClient {
     pub fn new(config: PusherConfig) -> PusherResult<Self> {
         let auth = PusherAuth::new(&config.app_key, &config.app_secret);
         let (event_tx, event_rx) = mpsc::channel(100);
+        let (event_broadcast, _) = broadcast::channel(100);
         let state = Arc::new(RwLock::new(ConnectionState::Disconnected));
         let event_handlers = Arc::new(RwLock::new(std::collections::HashMap::new()));
         let encrypted_channels = Arc::new(RwLock::new(std::collections::HashMap::new()));
 
         let socket_id = Arc::new(RwLock::new(None));
         let socket_id_for_handler = Arc::clone(&socket_id);
+        let event_broadcast_for_handler = event_broadcast.clone();
 
         let client = Self {
             config,
             auth,
-            websocket_command_tx: None,
+            websocket_command_tx: Arc::new(RwLock::new(None)),
             channels: Arc::new(RwLock::new(std::collections::HashMap::new())),
             event_handlers: event_handlers.clone(),
             state: state.clone(),
             event_tx,
+            event_broadcast,
             encrypted_channels,
             socket_id,
         };
@@ -97,13 +102,15 @@ impl PusherClient {
             event_rx,
             event_handlers,
             socket_id_for_handler,
+            event_broadcast_for_handler,
         ));
 
         Ok(client)
     }
 
     async fn send(&self, message: String) -> PusherResult<()> {
-        if let Some(tx) = &self.websocket_command_tx {
+        let websocket_command_tx = self.websocket_command_tx.read().await;
+        if let Some(tx) = websocket_command_tx.as_ref() {
             tx.send(WebSocketCommand::Send(message))
                 .await
                 .map_err(|e| {
@@ -123,8 +130,12 @@ impl PusherClient {
             >,
         >,
         socket_id: Arc<RwLock<Option<String>>>,
+        event_broadcast: broadcast::Sender<Event>,
     ) {
         while let Some(event) = event_rx.recv().await {
+            // Broadcast to all stream subscribers (zero-copy, ignores if no subscribers)
+            let _ = event_broadcast.send(event.clone());
+
             // Extract socket_id from connection_established events
             if event.event == "pusher:connection_established" {
                 if let Some(system_event) = event.as_system_event() {
@@ -137,6 +148,7 @@ impl PusherClient {
                 }
             }
 
+            // Call registered callbacks
             let handlers = event_handlers.read().await;
             if let Some(callbacks) = handlers.get(&event.event) {
                 for callback in callbacks {
@@ -151,7 +163,7 @@ impl PusherClient {
     /// # Returns
     ///
     /// A `PusherResult` indicating success or failure.
-    pub async fn connect(&mut self) -> PusherResult<()> {
+    pub async fn connect(&self) -> PusherResult<()> {
         let url = self.get_websocket_url()?;
         let (command_tx, command_rx) = mpsc::channel(100);
 
@@ -169,7 +181,7 @@ impl PusherClient {
             websocket.run().await;
         });
 
-        self.websocket_command_tx = Some(command_tx);
+        *self.websocket_command_tx.write().await = Some(command_tx);
 
         Ok(())
     }
@@ -179,8 +191,9 @@ impl PusherClient {
     /// # Returns
     ///
     /// A `PusherResult` indicating success or failure.
-    pub async fn disconnect(&mut self) -> PusherResult<()> {
-        if let Some(tx) = self.websocket_command_tx.take() {
+    pub async fn disconnect(&self) -> PusherResult<()> {
+        let mut websocket_command_tx = self.websocket_command_tx.write().await;
+        if let Some(tx) = websocket_command_tx.take() {
             tx.send(WebSocketCommand::Close).await.map_err(|e| {
                 PusherError::WebSocketError(format!("Failed to send close command: {}", e))
             })?;
@@ -198,7 +211,8 @@ impl PusherClient {
     /// # Returns
     ///
     /// A `PusherResult` indicating success or failure.
-    pub async fn subscribe(&mut self, channel_name: &str) -> PusherResult<()> {
+    pub async fn subscribe<S: AsRef<str>>(&self, channel_name: S) -> PusherResult<()> {
+        let channel_name = channel_name.as_ref();
         let channel = Channel::new(channel_name);
         let mut channels = self.channels.write().await;
         channels.insert(channel_name.to_string(), channel);
@@ -222,7 +236,8 @@ impl PusherClient {
     /// # Returns
     ///
     /// A `PusherResult` indicating success or failure.
-    pub async fn subscribe_encrypted(&mut self, channel_name: &str) -> PusherResult<()> {
+    pub async fn subscribe_encrypted<S: AsRef<str>>(&self, channel_name: S) -> PusherResult<()> {
+        let channel_name = channel_name.as_ref();
         if !channel_name.starts_with("private-encrypted-") {
             return Err(PusherError::ChannelError(
                 "Encrypted channels must start with 'private-encrypted-'".to_string(),
@@ -284,11 +299,13 @@ impl PusherClient {
     /// # Returns
     ///
     /// A `PusherResult` indicating success or failure.
-    pub async fn subscribe_with_auth(
-        &mut self,
-        channel_name: &str,
-        auth: &str,
+    pub async fn subscribe_with_auth<S1: AsRef<str>, S2: AsRef<str>>(
+        &self,
+        channel_name: S1,
+        auth: S2,
     ) -> PusherResult<()> {
+        let channel_name = channel_name.as_ref();
+        let auth = auth.as_ref();
         let channel = Channel::new(channel_name);
         let mut channels = self.channels.write().await;
         channels.insert(channel_name.to_string(), channel);
@@ -314,7 +331,8 @@ impl PusherClient {
     ///
     /// A `PusherResult` indicating success or failure.
     ///
-    pub async fn unsubscribe(&mut self, channel_name: &str) -> PusherResult<()> {
+    pub async fn unsubscribe<S: AsRef<str>>(&self, channel_name: S) -> PusherResult<()> {
+        let channel_name = channel_name.as_ref();
         {
             let mut channels = self.channels.write().await;
             channels.remove(channel_name);
@@ -346,7 +364,15 @@ impl PusherClient {
     /// # Returns
     ///
     /// A `PusherResult` indicating success or failure.
-    pub async fn trigger(&self, channel: &str, event: &str, data: &str) -> PusherResult<()> {
+    pub async fn trigger<S1: AsRef<str>, S2: AsRef<str>, S3: AsRef<str>>(
+        &self,
+        channel: S1,
+        event: S2,
+        data: S3,
+    ) -> PusherResult<()> {
+        let channel = channel.as_ref();
+        let event = event.as_ref();
+        let data = data.as_ref();
         let url = format!(
             "https://api-{}.pusher.com/apps/{}/events",
             self.config.cluster, self.config.app_id
@@ -393,12 +419,15 @@ impl PusherClient {
     /// # Returns
     ///
     /// A `PusherResult` indicating success or failure.
-    pub async fn trigger_encrypted(
+    pub async fn trigger_encrypted<S1: AsRef<str>, S2: AsRef<str>, S3: AsRef<str>>(
         &self,
-        channel: &str,
-        event: &str,
-        data: &str,
+        channel: S1,
+        event: S2,
+        data: S3,
     ) -> PusherResult<()> {
+        let channel = channel.as_ref();
+        let event = event.as_ref();
+        let data = data.as_ref();
         let shared_secret = {
             let encrypted_channels = self.encrypted_channels.read().await;
             encrypted_channels
@@ -419,12 +448,15 @@ impl PusherClient {
     ///
     /// # Arguments
     ///
-    /// * `batch_events` - A vector of `BatchEvent` structs, each containing channel, event, and data.
+    /// * `batch_events` - An iterator of `BatchEvent` structs, each containing channel, event, and data.
     ///
     /// # Returns
     ///
     /// A `PusherResult` indicating success or failure.
-    pub async fn trigger_batch(&self, batch_events: Vec<BatchEvent>) -> PusherResult<()> {
+    pub async fn trigger_batch<I>(&self, batch_events: I) -> PusherResult<()>
+    where
+        I: IntoIterator<Item = BatchEvent>,
+    {
         let url = format!(
             "https://api-{}.pusher.com/apps/{}/batch_events",
             self.config.cluster, self.config.app_id
@@ -488,19 +520,6 @@ impl PusherClient {
         Ok(())
     }
 
-    async fn handle_event(
-        event: Event,
-        handlers: &Arc<RwLock<HashMap<String, Vec<Box<dyn Fn(Event) + Send + Sync + 'static>>>>>,
-    ) -> PusherResult<()> {
-        let handlers = handlers.read().await;
-        if let Some(callbacks) = handlers.get(&event.event) {
-            for callback in callbacks {
-                callback(event.clone());
-            }
-        }
-        Ok(())
-    }
-
     fn get_websocket_url(&self) -> PusherResult<Url> {
         let scheme = if self.config.use_tls { "wss" } else { "ws" };
         info!("Connecting to Pusher using scheme: {}", scheme);
@@ -540,7 +559,7 @@ impl PusherClient {
         let mut result = iv.to_vec();
         result.extend_from_slice(&buffer[..ciphertext_len]);
 
-        Ok(base64::encode(result))
+        Ok(general_purpose::STANDARD.encode(result))
     }
 
     /// Decrypts encrypted data using the shared secret.
@@ -558,8 +577,12 @@ impl PusherClient {
     ///
     /// Returns a `PusherError` if the data cannot be decrypted.
     ///
-    fn decrypt_data(&self, encrypted_data: &str, shared_secret: &[u8]) -> PusherResult<String> {
-        let decoded = base64::decode(encrypted_data)
+    /// Decrypts encrypted data using the shared secret.
+    ///
+    /// This method is useful for decrypting data received from encrypted channels.
+    pub fn decrypt_data(&self, encrypted_data: &str, shared_secret: &[u8]) -> PusherResult<String> {
+        let decoded = general_purpose::STANDARD
+            .decode(encrypted_data)
             .map_err(|e| PusherError::DecryptionError(e.to_string()))?;
 
         if decoded.len() < 16 {
@@ -603,7 +626,8 @@ impl PusherClient {
     /// # Returns
     ///
     /// A PusherResult  
-    pub async fn get_channel_occupancy(&self, channel_name: &str) -> PusherResult<u32> {
+    pub async fn get_channel_occupancy<S: AsRef<str>>(&self, channel_name: S) -> PusherResult<u32> {
+        let channel_name = channel_name.as_ref();
         let path = format!("/apps/{}/channels/{}", self.config.app_id, channel_name);
         let url = format!("https://api-{}.pusher.com{}", self.config.cluster, path);
 
@@ -658,6 +682,37 @@ impl PusherClient {
             .await
             .map_err(|e| PusherError::WebSocketError(e.to_string()))
     }
+
+    /// Subscribes to all events, returning a `broadcast::Receiver` that implements `Stream`.
+    ///
+    /// This is the most idiomatic Rust way to handle events. The receiver can be used with
+    /// `futures_util::StreamExt` combinators like `filter`, `map`, `take`, etc.
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// use futures_util::StreamExt;
+    ///
+    /// let mut events = client.subscribe_events();
+    ///
+    /// // Process events in a loop
+    /// while let Ok(event) = events.recv().await {
+    ///     println!("Received: {:?}", event);
+    /// }
+    ///
+    /// // Or use Stream combinators
+    /// events
+    ///     .filter(|e| e.event == "my-event")
+    ///     .for_each(|e| println!("{:?}", e))
+    ///     .await;
+    /// ```
+    ///
+    /// # Performance
+    ///
+    /// The broadcast channel uses `Arc` internally, so cloning events is zero-copy.
+    /// Multiple subscribers can listen to the same event stream without performance penalty.
+    pub fn subscribe_events(&self) -> broadcast::Receiver<Event> {
+        self.event_broadcast.subscribe()
+    }
 }
 
 #[cfg(test)]
@@ -669,7 +724,10 @@ mod tests {
         let config =
             PusherConfig::from_env().expect("Failed to load Pusher configuration from environment");
         let client = PusherClient::new(config).unwrap();
-        assert_eq!(*client.state.read().await, ConnectionState::Disconnected);
+        assert_eq!(
+            client.get_connection_state().await,
+            ConnectionState::Disconnected
+        );
     }
 
     #[tokio::test]
