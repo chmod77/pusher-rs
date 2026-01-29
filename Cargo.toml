@@ -1,6 +1,6 @@
 [package]
 name = "pusher-rs"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 authors = ["chmod77 <shalom.nyende@gmail.com>"]
 description = "A bullet-proof Rust crate for interacting with the Pusher Channels HTTP/WS API"
