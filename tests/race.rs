@@ -217,7 +217,7 @@ async fn test_send_payload() {
 /// and then binding the event handler can miss events
 #[tokio::test]
 async fn test_user_initial_code_race_condition() {
-    println!("🧪 Testing the exact scenario from user's initial code...");
+    println!("Testing the exact scenario from user's initial code...");
     
     let mut client = setup_client().await;
     
@@ -230,7 +230,7 @@ async fn test_user_initial_code_race_condition() {
     // 2. Subscribe 
     // 3. Bind (AFTER subscribing - this is the race condition)
     
-    println!("📡 Connecting to Pusher...");
+    println!("Connecting to Pusher...");
     client.connect().await.expect("Failed to connect");
     
     // Wait for connection to be established
@@ -242,17 +242,17 @@ async fn test_user_initial_code_race_condition() {
             panic!("Connection timeout");
         }
     }
-    println!("✅ Connected!");
+    println!("Connected!");
     
-    println!("📢 Subscribing to my-channel...");
+    println!("Subscribing to my-channel...");
     client.subscribe("my-channel").await.expect("Failed to subscribe");
     
     // Small delay to simulate the race condition window
     tokio::time::sleep(Duration::from_millis(100)).await;
     
-    println!("🎯 Binding event handler (AFTER subscribing - race condition!)...");
+    println!("Binding event handler (AFTER subscribing - race condition!)...");
     client.bind("my-event", move |event| {
-        println!("🎉 Received event in race condition test: {:#?}", event);
+        println!("Received event in race condition test: {:#?}", event);
         let event_received = event_received_clone.clone();
         tokio::spawn(async move {
             let mut flag = event_received.write().await;
@@ -260,32 +260,32 @@ async fn test_user_initial_code_race_condition() {
         });
     }).await.expect("Failed to bind event");
     
-    println!("✅ Binded");
+    println!("Binded");
     
     // Now trigger an event to see if our handler catches it
-    println!("🚀 Triggering test event...");
+    println!("Triggering test event...");
     let test_data = r#"{"message": "Test from race condition test", "timestamp": "2025-01-01T00:00:00Z"}"#;
     
     match client.trigger("my-channel", "my-event", test_data).await {
-        Ok(_) => println!("✅ Event triggered successfully"),
+        Ok(_) => println!("Event triggered successfully"),
         Err(e) => {
-            println!("❌ Failed to trigger event: {:?}", e);
+            println!("Failed to trigger event: {:?}", e);
             // Don't panic here, as the test should continue to show the race condition
         }
     }
     
     // Wait for potential event reception
-    println!("⏳ Waiting for event reception (5 seconds)...");
+    println!("Waiting for event reception (5 seconds)...");
     tokio::time::sleep(Duration::from_secs(5)).await;
     
     let received = *event_received.read().await;
     
     if received {
-        println!("✅ SUCCESS: Event was received despite the race condition!");
+        println!("SUCCESS: Event was received despite the race condition!");
         println!("   This suggests the library handles the race condition well,");
         println!("   or we got lucky with timing.");
     } else {
-        println!("❌ RACE CONDITION CONFIRMED: Event was NOT received!");
+        println!("RACE CONDITION CONFIRMED: Event was NOT received!");
         println!("   This demonstrates the issue with binding after subscribing.");
         println!("   The event may have arrived before the handler was registered.");
     }
@@ -308,7 +308,7 @@ async fn test_user_initial_code_race_condition() {
 /// This demonstrates binding BEFORE subscribing to avoid race conditions
 #[tokio::test]
 async fn test_correct_event_handling_pattern() {
-    println!("🧪 Testing the CORRECT event handling pattern...");
+    println!("Testing the CORRECT event handling pattern...");
     
     let mut client = setup_client().await;
     
@@ -318,9 +318,9 @@ async fn test_correct_event_handling_pattern() {
     let received_data_clone = received_data.clone();
     
     // CORRECT PATTERN: Bind BEFORE connecting/subscribing
-    println!("🎯 Binding event handler FIRST (correct pattern)...");
+    println!("Binding event handler FIRST (correct pattern)...");
     client.bind("my-event", move |event| {
-        println!("🎉 Received event in correct pattern test: {:#?}", event);
+        println!("Received event in correct pattern test: {:#?}", event);
         let event_received = event_received_clone.clone();
         let received_data = received_data_clone.clone();
         tokio::spawn(async move {
@@ -331,44 +331,44 @@ async fn test_correct_event_handling_pattern() {
         });
     }).await.expect("Failed to bind event");
     
-    println!("📡 Connecting to Pusher...");
+    println!("Connecting to Pusher...");
     client.connect().await.expect("Failed to connect");
     
     // Wait for connection
     while client.get_connection_state().await != ConnectionState::Connected {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    println!("✅ Connected!");
+    println!("Connected!");
     
-    println!("📢 Subscribing to my-channel...");
+    println!("Subscribing to my-channel...");
     client.subscribe("my-channel").await.expect("Failed to subscribe");
     
     // Wait a bit for subscription to be processed
     tokio::time::sleep(Duration::from_millis(500)).await;
     
     // Trigger an event
-    println!("🚀 Triggering test event...");
+    println!("Triggering test event...");
     let test_data = r#"{"message": "Test from correct pattern test", "success": true}"#;
     
     client.trigger("my-channel", "my-event", test_data).await
         .expect("Failed to trigger event");
     
-    println!("✅ Event triggered successfully");
+    println!("Event triggered successfully");
     
     // Wait for event reception
-    println!("⏳ Waiting for event reception (3 seconds)...");
+    println!("Waiting for event reception (3 seconds)...");
     tokio::time::sleep(Duration::from_secs(3)).await;
     
     let received = *event_received.read().await;
     let data = received_data.read().await;
     
     if received {
-        println!("✅ SUCCESS: Event was received with correct pattern!");
+        println!("SUCCESS: Event was received with correct pattern!");
         if let Some(event_data) = data.as_ref() {
-            println!("📄 Received data: {}", event_data);
+            println!("Received data: {}", event_data);
         }
     } else {
-        println!("❌ UNEXPECTED: Event was not received even with correct pattern!");
+        println!("UNEXPECTED: Event was not received even with correct pattern!");
     }
     
     // Clean up
@@ -385,13 +385,13 @@ async fn test_correct_event_handling_pattern() {
         "Received data should match sent data"
     );
     
-    println!("✅ Correct pattern test completed successfully!");
+    println!("Correct pattern test completed successfully!");
 }
 
 /// Comprehensive test that demonstrates both patterns side by side
 #[tokio::test]
 async fn test_race_condition_comparison() {
-    println!("🧪 Running comprehensive race condition comparison test...");
+    println!("Running comprehensive race condition comparison test...");
     
     // Test 1: Race condition pattern (subscribe then bind)
     println!("\n=== Test 1: Race Condition Pattern ===");
@@ -402,17 +402,17 @@ async fn test_race_condition_comparison() {
     let result2 = test_pattern_bind_then_subscribe().await;
     
     println!("\n=== Results Summary ===");
-    println!("Race condition pattern (subscribe→bind): {}", if result1 { "✅ Received" } else { "❌ Missed" });
-    println!("Correct pattern (bind→subscribe): {}", if result2 { "✅ Received" } else { "❌ Missed" });
+    println!("Race condition pattern (subscribe→bind): {}", if result1 { "Received" } else { "Missed" });
+    println!("Correct pattern (bind→subscribe): {}", if result2 { "Received" } else { "Missed" });
     
     // The correct pattern should always work
     assert!(result2, "Correct pattern should always receive events");
     
     // The race condition pattern might or might not work depending on timing
     if !result1 {
-        println!("⚠️  Race condition confirmed: subscribe→bind pattern missed the event");
+        println!("WARNING: Race condition confirmed: subscribe→bind pattern missed the event");
     } else {
-        println!("ℹ️  Race condition pattern worked this time (timing dependent)");
+        println!("INFO: Race condition pattern worked this time (timing dependent)");
     }
 }
 
