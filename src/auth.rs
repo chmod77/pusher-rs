@@ -52,6 +52,8 @@ impl PusherAuth {
         ))
     }
 
+
+
     pub fn authenticate_private_encrypted_channel(
         &self,
         socket_id: &str,
