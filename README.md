@@ -11,11 +11,14 @@ A Rust client library for interacting with the Pusher Channels API. This library
 - [x] Connect to Pusher Channels
 - [x] Subscribe to public, private, presence, and private encrypted channels
 - [x] Publish events to channels
-- [x] Handle incoming events
+- [x] Stream-based event handling (most idiomatic Rust API)
+- [x] Callback-based event handling (legacy support)
 - [x] Automatic reconnection with exponential backoff
 - [x] Environment-based configuration
+- [x] Builder pattern for programmatic configuration
 - [x] Flexible channel management
 - [x] Support for Batch Triggers
+- [x] Zero-copy event broadcasting for performance
 
 ### Todo
 - [ ] Improve error handling and logging
@@ -62,10 +65,9 @@ use pusher_rs::{PusherClient, PusherConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Using environment variables
     let config = PusherConfig::from_env()?;
-    let mut client = PusherClient::new(config)?;
-
-    // PusherClient::new(config).unwrap()
+    let client = PusherClient::new(config)?;
     
     client.connect().await?;
 
@@ -108,9 +110,41 @@ client.subscribe("presence-my-channel").await?;
 client.unsubscribe("my-channel").await?;
 ```
 
-### Binding to Events
+### Handling Events
 
-Bind to a specific event on a channel:
+There are two ways to handle events:
+
+#### 1. Stream-based (Most Idiomatic - Recommended)
+
+The most idiomatic Rust way is to use the event stream:
+
+```rust
+use futures_util::StreamExt;
+use pusher_rs::Event;
+
+// Subscribe to all events
+let mut events = client.subscribe_events();
+
+// Process events in a loop
+while let Ok(event) = events.recv().await {
+    println!("Received event: {:?}", event);
+    
+    // Filter specific events
+    if event.event == "my-event" {
+        println!("Got my event: {:?}", event.data);
+    }
+}
+
+// Or use Stream combinators for more powerful processing
+events
+    .filter(|e| e.event == "my-event")
+    .for_each(|e| println!("Event: {:?}", e))
+    .await;
+```
+
+#### 2. Callback-based (Legacy)
+
+You can also bind callbacks to specific events:
 
 ```rust
 use pusher_rs::Event;
@@ -118,12 +152,6 @@ use pusher_rs::Event;
 client.bind("my-event", |event: Event| {
     println!("Received event: {:?}", event);
 }).await?;
-```
-
-### Subscribing to a channel
-
-```rust
-client.subscribe("my-channel").await?;
 ```
 
 ### Publishing an event
@@ -150,15 +178,8 @@ let batch_events = vec![
     },
 ];
 
+// Can also pass slices or any iterator
 client.trigger_batch(batch_events).await?;
-```
-
-### Handling events
-
-```rust
-client.bind("my-event", |event| {
-    println!("Received event: {:?}", event);
-}).await?;
 ```
 
 ### Working with encrypted channels
@@ -218,12 +239,32 @@ client.disconnect().await?;
 
 ### Custom Configuration
 
-While the library defaults to using environment variables, you can also create a custom configuration:
+While the library defaults to using environment variables, you can also create a custom configuration using the builder pattern:
 
 ```rust
 use pusher_rs::PusherConfig;
 use std::time::Duration;
 
+// Using the builder pattern (recommended)
+let config = PusherConfig::builder()
+    .app_id("your_app_id")
+    .app_key("your_app_key")
+    .app_secret("your_app_secret")
+    .cluster("eu")
+    .use_tls(true)
+    .host("custom.pusher.com")
+    .max_reconnection_attempts(10)
+    .backoff_interval(Duration::from_secs(2))
+    .activity_timeout(Duration::from_secs(180))
+    .pong_timeout(Duration::from_secs(45))
+    .build()?;
+
+let client = PusherClient::new(config)?;
+```
+
+Or construct directly (less ergonomic):
+
+```rust
 let config = PusherConfig {
     app_id: "your_app_id".to_string(),
     app_key: "your_app_key".to_string(),

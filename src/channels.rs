@@ -91,6 +91,11 @@ impl Channel {
     }
 }
 
+/// A collection for managing multiple channels.
+///
+/// This is a utility struct for users who want to manage channels outside of the `PusherClient`.
+/// It's mentioned in the README as part of the public API.
+#[allow(dead_code)]
 pub struct ChannelList {
     channels: HashMap<String, Channel>,
 }

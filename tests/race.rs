@@ -26,7 +26,7 @@ async fn setup_client() -> PusherClient {
 
 #[tokio::test]
 async fn test_pusher_client_connection() {
-    let mut client = setup_client().await;
+    let client = setup_client().await;
 
     client.connect().await.unwrap();
     assert_eq!(
@@ -43,7 +43,7 @@ async fn test_pusher_client_connection() {
 
 #[tokio::test]
 async fn test_channel_subscription() {
-    let mut client = setup_client().await;
+    let client = setup_client().await;
 
     // Connect with a timeout
     match timeout(Duration::from_secs(10), client.connect()).await {
@@ -122,7 +122,7 @@ async fn test_event_binding() {
 #[tokio::test]
 #[ignore]
 async fn test_encrypted_channel() {
-    let mut client = setup_client().await;
+    let client = setup_client().await;
 
     client.connect().await.unwrap();
     client
@@ -138,7 +138,7 @@ async fn test_encrypted_channel() {
 
 #[tokio::test]
 async fn test_send_payload() {
-    let mut client = setup_client().await;
+    let client = setup_client().await;
 
     // Connect with a timeout
     match timeout(Duration::from_secs(10), client.connect()).await {
@@ -219,7 +219,7 @@ async fn test_send_payload() {
 async fn test_user_initial_code_race_condition() {
     println!("Testing the exact scenario from user's initial code...");
     
-    let mut client = setup_client().await;
+    let client = setup_client().await;
     
     // Track whether we receive any events
     let event_received = Arc::new(RwLock::new(false));
@@ -310,7 +310,7 @@ async fn test_user_initial_code_race_condition() {
 async fn test_correct_event_handling_pattern() {
     println!("Testing the CORRECT event handling pattern...");
     
-    let mut client = setup_client().await;
+    let client = setup_client().await;
     
     let event_received = Arc::new(RwLock::new(false));
     let event_received_clone = event_received.clone();
@@ -417,7 +417,7 @@ async fn test_race_condition_comparison() {
 }
 
 async fn test_pattern_subscribe_then_bind() -> bool {
-    let mut client = setup_client().await;
+    let client = setup_client().await;
     let event_received = Arc::new(RwLock::new(false));
     let event_received_clone = event_received.clone();
     
@@ -451,7 +451,7 @@ async fn test_pattern_subscribe_then_bind() -> bool {
 }
 
 async fn test_pattern_bind_then_subscribe() -> bool {
-    let mut client = setup_client().await;
+    let client = setup_client().await;
     let event_received = Arc::new(RwLock::new(false));
     let event_received_clone = event_received.clone();
     

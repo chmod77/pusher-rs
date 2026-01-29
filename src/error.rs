@@ -76,47 +76,58 @@ impl From<&str> for PusherError {
 pub type PusherResult<T> = Result<T, PusherError>;
 
 // Helper functions for creating specific errors
-
-pub fn auth_error(message: impl Into<String>) -> PusherError {
-    PusherError::AuthError(message.into())
-}
+// These are utility functions that users may find useful for error handling
 
 pub fn channel_error(message: impl Into<String>) -> PusherError {
     PusherError::ChannelError(message.into())
 }
 
+#[allow(dead_code)]
+pub fn auth_error(message: impl Into<String>) -> PusherError {
+    PusherError::AuthError(message.into())
+}
+
+#[allow(dead_code)]
 pub fn event_error(message: impl Into<String>) -> PusherError {
     PusherError::EventError(message.into())
 }
 
+#[allow(dead_code)]
 pub fn connection_error(message: impl Into<String>) -> PusherError {
     PusherError::ConnectionError(message.into())
 }
 
+#[allow(dead_code)]
 pub fn config_error(message: impl Into<String>) -> PusherError {
     PusherError::ConfigError(message.into())
 }
 
+#[allow(dead_code)]
 pub fn rate_limit_error(message: impl Into<String>) -> PusherError {
     PusherError::RateLimitError(message.into())
 }
 
+#[allow(dead_code)]
 pub fn encryption_error(message: impl Into<String>) -> PusherError {
     PusherError::EncryptionError(message.into())
 }
 
+#[allow(dead_code)]
 pub fn decryption_error(message: impl Into<String>) -> PusherError {
     PusherError::DecryptionError(message.into())
 }
 
+#[allow(dead_code)]
 pub fn presence_data_error(message: impl Into<String>) -> PusherError {
     PusherError::PresenceDataError(message.into())
 }
 
+#[allow(dead_code)]
 pub fn api_error(message: impl Into<String>) -> PusherError {
     PusherError::ApiError(message.into())
 }
 
+#[allow(dead_code)]
 pub fn timeout_error(message: impl Into<String>) -> PusherError {
     PusherError::TimeoutError(message.into())
 }

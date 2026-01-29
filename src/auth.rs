@@ -7,8 +7,6 @@ use sha2::Sha256;
 use std::collections::BTreeMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-type HmacSha256 = Hmac<Sha256>;
-
 pub struct PusherAuth {
     key: String,
     secret: String,
