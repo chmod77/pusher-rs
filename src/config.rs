@@ -2,7 +2,7 @@ use dotenv::dotenv;
 use std::env;
 use std::time::Duration;
 
-/// Config for the Pusher client. We are defaulting to .env. 
+/// Config for the Pusher client. We are defaulting to .env.
 /// TODO: look into .toml or .yaml
 #[derive(Clone, Debug)]
 pub struct PusherConfig {

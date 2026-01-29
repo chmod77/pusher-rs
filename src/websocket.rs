@@ -10,11 +10,10 @@ use tokio::time::{sleep, interval, Duration};
 use url::Url;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
-use log::{debug, error, info, warn};
-use std::pin::Pin;
+use log::{debug, error, info};
 
 use crate::error::{PusherError, PusherResult};
-use crate::{Event, SystemEvent, ConnectionState};
+use crate::{Event, ConnectionState};
 
 const PING_INTERVAL: Duration = Duration::from_secs(30);
 const PONG_TIMEOUT: Duration = Duration::from_secs(10);
