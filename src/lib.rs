@@ -93,7 +93,11 @@ impl PusherClient {
             socket_id,
         };
 
-        tokio::spawn(Self::handle_events(event_rx, event_handlers, socket_id_for_handler));
+        tokio::spawn(Self::handle_events(
+            event_rx,
+            event_handlers,
+            socket_id_for_handler,
+        ));
 
         Ok(client)
     }
@@ -124,7 +128,9 @@ impl PusherClient {
             // Extract socket_id from connection_established events
             if event.event == "pusher:connection_established" {
                 if let Some(system_event) = event.as_system_event() {
-                    if let SystemEventData::ConnectionEstablished { socket_id: sid, .. } = system_event.data {
+                    if let SystemEventData::ConnectionEstablished { socket_id: sid, .. } =
+                        system_event.data
+                    {
                         let mut socket_id_guard = socket_id.write().await;
                         *socket_id_guard = Some(sid);
                     }
@@ -207,7 +213,6 @@ impl PusherClient {
         self.send(serde_json::to_string(&data)?).await
     }
 
-
     /// Subscribes to an encrypted channel.
     ///
     /// # Arguments
@@ -241,9 +246,9 @@ impl PusherClient {
     /// A `PusherResult` containing the socket ID if connected, or an error if not connected.
     pub async fn get_socket_id(&self) -> PusherResult<String> {
         let socket_id_guard = self.socket_id.read().await;
-        socket_id_guard
-            .clone()
-            .ok_or_else(|| PusherError::ConnectionError("Not connected or socket ID not available".into()))
+        socket_id_guard.clone().ok_or_else(|| {
+            PusherError::ConnectionError("Not connected or socket ID not available".into())
+        })
     }
 
     /// Authenticates a presence channel subscription.
@@ -265,7 +270,8 @@ impl PusherClient {
         user_id: &str,
         user_info: Option<&Value>,
     ) -> PusherResult<String> {
-        self.auth.authenticate_presence_channel(socket_id, channel_name, user_id, user_info)
+        self.auth
+            .authenticate_presence_channel(socket_id, channel_name, user_id, user_info)
     }
 
     /// Subscribes to a channel with authentication data.
@@ -278,7 +284,11 @@ impl PusherClient {
     /// # Returns
     ///
     /// A `PusherResult` indicating success or failure.
-    pub async fn subscribe_with_auth(&mut self, channel_name: &str, auth: &str) -> PusherResult<()> {
+    pub async fn subscribe_with_auth(
+        &mut self,
+        channel_name: &str,
+        auth: &str,
+    ) -> PusherResult<()> {
         let channel = Channel::new(channel_name);
         let mut channels = self.channels.write().await;
         channels.insert(channel_name.to_string(), channel);
@@ -343,8 +353,7 @@ impl PusherClient {
         );
 
         // Validate that the data is valid JSON, but keep it as a string
-        serde_json::from_str::<serde_json::Value>(data)
-            .map_err(|e| PusherError::JsonError(e))?;
+        serde_json::from_str::<serde_json::Value>(data).map_err(|e| PusherError::JsonError(e))?;
 
         let body = json!({
             "name": event,
@@ -590,46 +599,40 @@ impl PusherClient {
     }
 
     /// Gets the channel Occupancy
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A PusherResult  
     pub async fn get_channel_occupancy(&self, channel_name: &str) -> PusherResult<u32> {
         let path = format!("/apps/{}/channels/{}", self.config.app_id, channel_name);
-        let url = format!(
-            "https://api-{}.pusher.com{}",
-            self.config.cluster, path
-        );
+        let url = format!("https://api-{}.pusher.com{}", self.config.cluster, path);
 
         // Create an empty body for GET request
         let body = serde_json::json!({});
         log::info!("BODY: {:?}", body);
         log::info!("URL {:?}", url);
-        let mut params = self.auth.authenticate_request(
-            "GET",
-            &path,
-            &body
-        )?;
+        let mut params = self.auth.authenticate_request("GET", &path, &body)?;
 
         log::info!("PARAMS: {:?}", params);
         // Add the info parameter to the query string, not the body
         params.insert("info".to_string(), "subscription_count".to_string());
 
         let client = reqwest::Client::new();
-        let response = client
-            .get(&url)
-            .query(&params)
-            .send()
-            .await?;
+        let response = client.get(&url).query(&params).send().await?;
         log::info!("URL: {:?}", response.url());
         let status = response.status();
 
         if status.is_success() {
             let body: serde_json::Value = response.json().await?;
-            Ok(body.get("occupied")
+            Ok(body
+                .get("occupied")
                 .and_then(|v| v.as_bool())
                 .map(|occupied| if occupied { 1 } else { 0 })
-                .or_else(|| body["subscription_count"].as_u64().map(|count| count as u32))
+                .or_else(|| {
+                    body["subscription_count"]
+                        .as_u64()
+                        .map(|count| count as u32)
+                })
                 .unwrap_or(0))
         } else {
             let error_body = response.text().await?;
