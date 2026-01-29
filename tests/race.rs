@@ -244,14 +244,14 @@ async fn test_user_initial_code_race_condition() {
     }
     println!("Connected!");
     
-    println!("Subscribing to my-channel...");
-    client.subscribe("my-channel").await.expect("Failed to subscribe");
+    println!("Subscribing to race-test-channel...");
+    client.subscribe("race-test-channel").await.expect("Failed to subscribe");
     
     // Small delay to simulate the race condition window
     tokio::time::sleep(Duration::from_millis(100)).await;
     
     println!("Binding event handler (AFTER subscribing - race condition!)...");
-    client.bind("my-event", move |event| {
+    client.bind("race-test-event", move |event| {
         println!("Received event in race condition test: {:#?}", event);
         let event_received = event_received_clone.clone();
         tokio::spawn(async move {
@@ -266,7 +266,7 @@ async fn test_user_initial_code_race_condition() {
     println!("Triggering test event...");
     let test_data = r#"{"message": "Test from race condition test", "timestamp": "2025-01-01T00:00:00Z"}"#;
     
-    match client.trigger("my-channel", "my-event", test_data).await {
+    match client.trigger("race-test-channel", "race-test-event", test_data).await {
         Ok(_) => println!("Event triggered successfully"),
         Err(e) => {
             println!("Failed to trigger event: {:?}", e);
@@ -319,7 +319,7 @@ async fn test_correct_event_handling_pattern() {
     
     // CORRECT PATTERN: Bind BEFORE connecting/subscribing
     println!("Binding event handler FIRST (correct pattern)...");
-    client.bind("my-event", move |event| {
+    client.bind("correct-test-event", move |event| {
         println!("Received event in correct pattern test: {:#?}", event);
         let event_received = event_received_clone.clone();
         let received_data = received_data_clone.clone();
@@ -340,8 +340,8 @@ async fn test_correct_event_handling_pattern() {
     }
     println!("Connected!");
     
-    println!("Subscribing to my-channel...");
-    client.subscribe("my-channel").await.expect("Failed to subscribe");
+    println!("Subscribing to correct-test-channel...");
+    client.subscribe("correct-test-channel").await.expect("Failed to subscribe");
     
     // Wait a bit for subscription to be processed
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -350,7 +350,7 @@ async fn test_correct_event_handling_pattern() {
     println!("Triggering test event...");
     let test_data = r#"{"message": "Test from correct pattern test", "success": true}"#;
     
-    client.trigger("my-channel", "my-event", test_data).await
+    client.trigger("correct-test-channel", "correct-test-event", test_data).await
         .expect("Failed to trigger event");
     
     println!("Event triggered successfully");
